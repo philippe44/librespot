@@ -3,6 +3,7 @@ use futures::{future, Future};
 use std::borrow::Cow;
 use std::io::{Read, Seek};
 use std::mem;
+use std::process::exit;
 use std::sync::mpsc::{RecvError, TryRecvError};
 use std::thread;
 use std;
@@ -205,7 +206,7 @@ impl PlayerInternal {
                     editor.modify_stream(&mut packet.data)
                 };
 
-                self.sink.write(&packet.data).unwrap();
+                self.sink.write(&packet.data).unwrap_or_else(|e| { error!("{}", e); exit(0) });
             }
 
             Some(Err(vorbis::VorbisError::Hole)) => (),
