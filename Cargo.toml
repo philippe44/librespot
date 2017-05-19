@@ -52,8 +52,6 @@ alsa            = { git = "https://github.com/plietar/rust-alsa", optional = tru
 portaudio-rs    = { version = "0.3.0", optional = true }
 libpulse-sys    = { git = "https://github.com/astro/libpulse-sys", optional = true }
 
-mdns            = { git = "https://github.com/plietar/rust-mdns" }
-
 error-chain = { version = "0.9.0", default_features = false }
 futures = "0.1.8"
 tokio-core = "0.1.2"
@@ -61,8 +59,8 @@ tokio-proto = "0.1.0"
 tokio-signal = "0.1"
 uuid = { version = "0.4", features = ["v4"] }
 
-[target.i686-pc-windows-msvc]
-mdns            = { git = "https://github.com/plietar/rust-mdns", optional = true }
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+mdns            = { git = "https://github.com/plietar/rust-mdns" }
 
 [build-dependencies]
 vergen          = "0.1.0"
@@ -76,7 +74,7 @@ pulseaudio-backend = ["libpulse-sys"]
 with-tremor = ["tremor"]
 with-audiocache = []
 
-default = ["portaudio-backend","with-audiocache"]
+default = []
 
 [package.metadata.deb]
 maintainer = "nobody"
