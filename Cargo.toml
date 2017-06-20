@@ -72,7 +72,6 @@ portaudio-backend = ["portaudio-rs"]
 pulseaudio-backend = ["libpulse-sys"]
 
 with-tremor = ["tremor"]
-with-audiocache = []
 
 default = []
 

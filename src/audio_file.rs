@@ -3,9 +3,7 @@ use byteorder::{ByteOrder, BigEndian, WriteBytesExt};
 use futures::Stream;
 use futures::sync::{oneshot, mpsc};
 use futures::{Poll, Async, Future};
-#[cfg(feature = "with-audiocache")]
-use futures::future;
-use futures::future::FutureResult;
+use futures::future::{self, FutureResult};
 use std::cmp::min;
 use std::fs;
 use std::io::{self, Read, Write, Seek, SeekFrom};
@@ -140,7 +138,6 @@ impl AudioFileManager {
 
         debug!("Downloading file {}", file_id);
 
-        #[allow(unused_variables)]
         let (complete_tx, complete_rx) = oneshot::channel();
         let (headers, data) = request_chunk(&self.session(), file_id, 0).split();
 
