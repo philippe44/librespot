@@ -87,6 +87,7 @@ struct Setup {
 fn setup(args: &[String]) -> Setup {
     let mut opts = getopts::Options::new();
     opts.optopt("c", "cache", "Path to a directory where files will be cached.", "CACHE")
+        .optflag("", "disable-audio-cache", "Disable caching of the audio data.")
         .reqopt("n", "name", "Device name", "NAME")
         .optopt("b", "bitrate", "Bitrate (96, 160 or 320). Defaults to 160", "BITRATE")
         .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
@@ -156,6 +157,7 @@ fn setup(args: &[String]) -> Setup {
         bitrate: bitrate,
         onstart: matches.opt_str("onstart"),
         onstop: matches.opt_str("onstop"),
+        use_audio_cache: !matches.opt_present("disable-audio-cache"),
     };
 
     let device = matches.opt_str("device");

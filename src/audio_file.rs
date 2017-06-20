@@ -131,14 +131,11 @@ impl Future for AudioFileOpenStreaming {
 
 impl AudioFileManager {
     pub fn open(&self, file_id: FileId) -> AudioFileOpen {
-        #[cfg(feature = "with-audiocache")]
         let cache = self.session().cache().cloned();
 
-        #[cfg(feature = "with-audiocache")] {
-            if let Some(file) = cache.as_ref().and_then(|cache| cache.file(file_id)) {
-                debug!("File {} already in cache", file_id);
-                return AudioFileOpen::Cached(future::ok(file));
-            }
+        if let Some(file) = cache.as_ref().and_then(|cache| cache.file(file_id)) {
+            debug!("File {} already in cache", file_id);
+            return AudioFileOpen::Cached(future::ok(file));
         }
 
         debug!("Downloading file {}", file_id);
@@ -157,20 +154,19 @@ impl AudioFileManager {
             complete_tx: Some(complete_tx),
         };
 
-        #[cfg(feature = "with-audiocache")]
-        let session = self.session();
-        
-        #[cfg(feature = "with-audiocache")]
-        self.session().spawn(move |_| {
-            complete_rx.map(move |mut file| {
-                if let Some(cache) = session.cache() {
-                    cache.save_file(file_id, &mut file);
-                    debug!("File {} complete, saving to cache", file_id);
-                } else {
-                    debug!("File {} complete", file_id);
-                }
-            }).or_else(|oneshot::Canceled| Ok(()))
-        });
+        if self.session().config().use_audio_cache {
+            let session = self.session();
+            self.session().spawn(move |_| {
+                complete_rx.map(move |mut file| {
+                    if let Some(cache) = session.cache() {
+                        cache.save_file(file_id, &mut file);
+                        debug!("File {} complete, saving to cache", file_id);
+                    } else {
+                        debug!("File {} complete", file_id);
+                    }
+                }).or_else(|oneshot::Canceled| Ok(()))
+            });
+        }
 
         AudioFileOpen::Streaming(open)
     }
