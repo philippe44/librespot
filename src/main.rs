@@ -158,7 +158,6 @@ fn setup(args: &[String]) -> Setup {
         bitrate: bitrate,
         onstart: matches.opt_str("onstart"),
         onstop: matches.opt_str("onstop"),
-        use_audio_cache: !matches.opt_present("disable-audio-cache"),
     };
 
     let device = matches.opt_str("device");
