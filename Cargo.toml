@@ -63,6 +63,7 @@ uuid = { version = "0.4", features = ["v4"] }
 mdns            = { git = "https://github.com/plietar/rust-mdns" }
 
 [build-dependencies]
+rand            = "0.3.13"
 vergen          = "0.1.0"
 protobuf_macros = { git = "https://github.com/plietar/rust-protobuf-macros", features = ["with-syntex"] }
 
@@ -91,3 +92,8 @@ assets = [
     ["target/release/librespot", "usr/bin/", "755"],
     ["contrib/librespot.service", "lib/systemd/system/", "644"]
 ]
+
+
+[profile.release]
+lto = true
+panic = 'abort'
