@@ -16,9 +16,6 @@ use std::path::Path;
 
 use protocol::authentication::AuthenticationType;
 
-#[cfg(not(target_os="windows"))]
-pub mod discovery;
-
 #[derive(Debug, Clone)]
 #[derive(Serialize, Deserialize)]
 pub struct Credentials {
