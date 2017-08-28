@@ -1,6 +1,6 @@
 language: rust
 rust:
-  - 1.15.0
+  - 1.17.0
   - stable
   - beta
   - nightly
@@ -28,6 +28,9 @@ script:
     - cargo build --no-default-features --features "pulseaudio-backend"
     - cargo build --no-default-features --features "alsa-backend"
     - cargo build --no-default-features --target armv7-unknown-linux-gnueabihf
+    - if [[ $TRAVIS_RUST_VERSION != *"1.17.0"* ]]; then
+        cargo build --no-default-features --features "with-lewton";
+      fi
 
 notifications:
     email: false
