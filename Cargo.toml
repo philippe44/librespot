@@ -37,7 +37,7 @@ num-traits      = "0.1.36"
 protobuf        = "1.1"
 rand            = "0.3.13"
 rpassword       = "0.3.0"
-rust-crypto     = "0.2.34"
+rust-crypto     = { git = "https://github.com/awmath/rust-crypto.git", branch = "avx2" }
 serde           = "0.9.6"
 serde_json      = "0.9.5"
 serde_derive    = "0.9.6"
@@ -63,6 +63,7 @@ uuid = { version = "0.4", features = ["v4"] }
 mdns            = { git = "https://github.com/plietar/rust-mdns" }
 
 [build-dependencies]
+rand            = "0.3.13"
 vergen          = "0.1.0"
 protobuf_macros = { git = "https://github.com/plietar/rust-protobuf-macros", features = ["with-syntex"] }
 
@@ -72,7 +73,6 @@ portaudio-backend = ["portaudio-rs"]
 pulseaudio-backend = ["libpulse-sys"]
 
 with-tremor = ["tremor"]
-with-audiocache = []
 
 default = []
 
@@ -92,3 +92,8 @@ assets = [
     ["target/release/librespot", "usr/bin/", "755"],
     ["contrib/librespot.service", "lib/systemd/system/", "644"]
 ]
+
+
+[profile.release]
+lto = true
+panic = 'abort'
