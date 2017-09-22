@@ -105,6 +105,7 @@ pub struct PlayerConfig {
     pub bitrate: Bitrate,
     pub onstart: Option<String>,
     pub onstop: Option<String>,
+    pub onchange: Option<String>,
 }
 
 impl Default for PlayerConfig {
@@ -113,6 +114,7 @@ impl Default for PlayerConfig {
             bitrate: Bitrate::default(),
             onstart: None,
             onstop: None,
+            onchange: None,
         }
     }
 }

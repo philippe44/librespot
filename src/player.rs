@@ -238,6 +238,9 @@ impl PlayerInternal {
                             if !self.state.is_playing() {
                                 self.run_onstart();
                             }
+                            else {
+                            	self.run_onchange();
+                            }
                             self.sink.start().unwrap();
 
                             self.state = PlayerState::Playing {
@@ -274,6 +277,7 @@ impl PlayerInternal {
                 } else {
                     warn!("Player::seek called from invalid state");
                 }
+               	self.run_onchange();
             }
 
             PlayerCommand::Play => {
@@ -325,6 +329,12 @@ impl PlayerInternal {
 
     fn run_onstop(&self) {
         if let Some(ref program) = self.config.onstop {
+            util::run_program(program)
+        }
+    }
+
+    fn run_onchange(&self) {
+        if let Some(ref program) = self.config.onchange {
             util::run_program(program)
         }
     }

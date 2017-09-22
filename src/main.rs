@@ -95,6 +95,7 @@ fn setup(args: &[String]) -> Setup {
         .optopt("b", "bitrate", "Bitrate (96, 160 or 320). Defaults to 160", "BITRATE")
         .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
         .optopt("", "onstop", "Run PROGRAM when playback has ended.", "PROGRAM")
+        .optopt("", "onchange", "Run PROGRAM when playback changes (new track, seeking etc.).", "PROGRAM")
         .optflag("v", "verbose", "Enable verbose output")
         .optopt("u", "username", "Username to sign in with", "USERNAME")
         .optopt("p", "password", "Password", "PASSWORD")
@@ -170,6 +171,7 @@ fn setup(args: &[String]) -> Setup {
             bitrate: bitrate,
             onstart: matches.opt_str("onstart"),
             onstop: matches.opt_str("onstop"),
+            onchange: matches.opt_str("onchange"),
         }
     };
 
