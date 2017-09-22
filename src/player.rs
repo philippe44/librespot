@@ -236,7 +236,7 @@ impl PlayerInternal {
                                 self.run_onstart();
                             }
                             else {
-                            	self.run_onchange();
+                                self.run_onchange();
                             }
                             self.sink.start().unwrap();
 
@@ -274,7 +274,7 @@ impl PlayerInternal {
                 } else {
                     warn!("Player::seek called from invalid state");
                 }
-               	self.run_onchange();
+                self.run_onchange();
             }
 
             PlayerCommand::Play => {

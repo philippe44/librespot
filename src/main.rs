@@ -152,8 +152,8 @@ fn setup(args: &[String]) -> Setup {
 #[cfg(not(target_os="windows"))]
     let enable_discovery = !matches.opt_present("disable-discovery");
 #[cfg(target_os="windows")]
-	let enable_discovery = false;
-	
+    let enable_discovery = false;
+
     let config = Config {
         user_agent: version::version_string(),
         device_id: device_id,
@@ -189,7 +189,7 @@ struct Main {
 #[cfg(not(target_os="windows"))]
     discovery: Option<DiscoveryStream>,
 #[cfg(target_os="windows")]
-	discovery: Option<String>,
+    discovery: Option<String>,
     signal: IoStream<()>,
 
     spirc: Option<Spirc>,
