@@ -217,7 +217,7 @@ struct Main {
 #[cfg(not(target_os="windows"))]
     discovery: Option<DiscoveryStream>,
 #[cfg(target_os="windows")]
-	discovery: Option<String>,
+    discovery: Option<String>,
     signal: IoStream<()>,
 
     spirc: Option<Spirc>,
