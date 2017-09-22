@@ -73,7 +73,7 @@ fn initial_device_state(name: String, volume: u16) -> DeviceState {
             },
             @{
                 typ: protocol::spirc::CapabilityType::kDeviceType,
-                intValue => [5]
+                intValue => [4]
             },
             @{
                 typ: protocol::spirc::CapabilityType::kGaiaEqConnectId,
