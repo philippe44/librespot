@@ -3,3 +3,4 @@ target
 spotify_appkey.key
 .vagrant/
 .project
+.history
