@@ -44,6 +44,11 @@ impl LMS {
     self.request(r#"["spottyconnect","change"]"#.to_string())
   }
 
+  pub fn volume(&self, volume: u16) {
+    // we're not using the volume here, as LMS will read player state anyway
+    self.request(format!(r#"["spottyconnect","volume",{}]"#, volume.to_string()))
+  }
+
   pub fn request(&self, command: String) {
     debug!("Base URL to talk to LMS: {}", self.base_url.clone().unwrap());
 

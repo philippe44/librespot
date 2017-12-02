@@ -40,6 +40,7 @@ enum PlayerCommand {
     Pause,
     Stop,
     Seek(u32),
+    Volume(u32),
 }
 
 impl Player {
@@ -95,6 +96,10 @@ impl Player {
 
     pub fn seek(&self, position_ms: u32) {
         self.command(PlayerCommand::Seek(position_ms));
+    }
+
+    pub fn set_volume(&self, volume: u32) {
+        self.command(PlayerCommand::Volume(volume));
     }
 }
 
@@ -286,6 +291,25 @@ impl PlayerInternal {
                 self.run_onchange();
             }
 
+            PlayerCommand::Volume(mut volume) => {
+                if self.lms.is_configured() {
+                  if volume > 0 {
+                    volume = volume * 100 / std::u16::MAX as u32;
+                  } else {
+                    volume = 0;
+                  }
+
+                  // LMS volume is 0-100. We need to convert
+                  let v2 = if volume > 100 {
+                    Some(100 as u16)
+                  } else {
+                    Some(volume as u16)
+                  };
+
+                  self.lms.volume(v2.unwrap());
+                }
+            }
+
             PlayerCommand::Play => {
                 if let PlayerState::Paused { .. } = self.state {
                     self.state.paused_to_playing();
@@ -451,6 +475,11 @@ impl ::std::fmt::Debug for PlayerCommand {
             PlayerCommand::Seek(position) => {
                 f.debug_tuple("Seek")
                  .field(&position)
+                 .finish()
+            }
+            PlayerCommand::Volume(volume) => {
+                f.debug_tuple("Volume")
+                 .field(&volume)
                  .finish()
             }
         }
