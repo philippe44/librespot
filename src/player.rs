@@ -347,7 +347,10 @@ impl PlayerInternal {
                         self.state = PlayerState::Stopped;
                     },
                     PlayerState::Stopped => {
-                        warn!("Player::stop called from invalid state");
+                      if self.lms.is_configured() {
+                        self.run_onstop();
+                      }
+                      warn!("Player::stop called from invalid state");
                     }
                     PlayerState::Invalid => panic!("invalid state"),
                 }
