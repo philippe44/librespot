@@ -347,6 +347,7 @@ impl PlayerInternal {
                         self.state = PlayerState::Stopped;
                     },
                     PlayerState::Stopped => {
+                      // we're not signalling end of stream, therefore the state is not updated?
                       if self.lms.is_configured() {
                         self.run_onstop();
                       }
