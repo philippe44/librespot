@@ -50,6 +50,8 @@ pub struct Config {
     pub onstart: Option<String>,
     pub onstop: Option<String>,
     pub onchange: Option<String>,
+    pub mac: Option<String>,
+    pub lms: Option<String>,
 }
 
 impl Default for Config {
@@ -62,6 +64,8 @@ impl Default for Config {
             onstart: None,
             onstop: None,
             onchange: None,
+            mac: None,
+            lms: None,
         }
     }
 }

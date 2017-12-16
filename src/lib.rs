@@ -72,4 +72,6 @@ pub mod version;
 pub mod mixer;
 pub mod keymaster;
 
+pub mod lms;
+
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));

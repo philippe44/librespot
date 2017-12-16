@@ -17,6 +17,8 @@ use session::{Bitrate, Session};
 use mixer::AudioFilter;
 use util::{self, SpotifyId, Subfile};
 
+use lms::LMS;
+
 #[derive(Clone)]
 pub struct Player {
     commands: std::sync::mpsc::Sender<PlayerCommand>,
@@ -25,6 +27,7 @@ pub struct Player {
 struct PlayerInternal {
     session: Session,
     commands: std::sync::mpsc::Receiver<PlayerCommand>,
+    lms: LMS,
 
     state: PlayerState,
     sink: Box<Sink>,
@@ -37,6 +40,7 @@ enum PlayerCommand {
     Pause,
     Stop,
     Seek(u32),
+    Volume(u32),
 }
 
 impl Player {
@@ -48,6 +52,7 @@ impl Player {
             debug!("new Player[{}]", session.session_id());
 
             let internal = PlayerInternal {
+                lms: LMS::new(session.config().lms.clone(), session.config().mac.clone()),
                 session: session,
                 commands: cmd_rx,
 
@@ -92,6 +97,10 @@ impl Player {
     pub fn seek(&self, position_ms: u32) {
         self.command(PlayerCommand::Seek(position_ms));
     }
+
+    pub fn set_volume(&self, volume: u32) {
+        self.command(PlayerCommand::Volume(volume));
+    }
 }
 
 type Decoder = vorbis::Decoder<Subfile<AudioDecrypt<AudioFile>>>;
@@ -129,12 +138,14 @@ impl PlayerState {
         }
     }
 
-    fn signal_end_of_track(self) {
+    fn signal_end_of_track(self, connect_mode: bool) {
         use self::PlayerState::*;
         match self {
             Paused { end_of_track, .. } |
             Playing { end_of_track, .. } => {
+              if !connect_mode {
                 end_of_track.complete(())
+              }
             }
 
             Stopped => warn!("signal_end_of_track from stopped state"),
@@ -213,10 +224,13 @@ impl PlayerInternal {
             Some(Err(e)) => panic!("Vorbis error {:?}", e),
             None => {
                 self.sink.stop().unwrap();
-                self.run_onstop();
+
+                if !self.lms.is_configured() {
+                  self.run_onstop();
+                }
 
                 let old_state = mem::replace(&mut self.state, PlayerState::Stopped);
-                old_state.signal_end_of_track();
+                old_state.signal_end_of_track(self.lms.is_configured());
             }
         }
     }
@@ -277,12 +291,33 @@ impl PlayerInternal {
                 self.run_onchange();
             }
 
+            PlayerCommand::Volume(mut volume) => {
+                if self.lms.is_configured() {
+                  if volume > 0 {
+                    volume = volume * 100 / std::u16::MAX as u32;
+                  } else {
+                    volume = 0;
+                  }
+
+                  // LMS volume is 0-100. We need to convert
+                  let v2 = if volume > 100 {
+                    Some(100 as u16)
+                  } else {
+                    Some(volume as u16)
+                  };
+
+                  self.lms.volume(v2.unwrap());
+                }
+            }
+
             PlayerCommand::Play => {
                 if let PlayerState::Paused { .. } = self.state {
                     self.state.paused_to_playing();
 
                     self.run_onstart();
                     self.sink.start().unwrap();
+                } else if self.lms.is_configured() {
+                    self.run_onstart();
                 } else {
                     warn!("Player::play called from invalid state");
                 }
@@ -293,6 +328,8 @@ impl PlayerInternal {
                     self.state.playing_to_paused();
 
                     self.sink.stop().unwrap();
+                    self.run_onstop();
+                } else if self.lms.is_configured() {
                     self.run_onstop();
                 } else {
                     warn!("Player::pause called from invalid state");
@@ -310,7 +347,11 @@ impl PlayerInternal {
                         self.state = PlayerState::Stopped;
                     },
                     PlayerState::Stopped => {
-                        warn!("Player::stop called from invalid state");
+                      // we're not signalling end of stream, therefore the state is not updated?
+                      if self.lms.is_configured() {
+                        self.run_onstop();
+                      }
+                      warn!("Player::stop called from invalid state");
                     }
                     PlayerState::Invalid => panic!("invalid state"),
                 }
@@ -319,18 +360,21 @@ impl PlayerInternal {
     }
 
     fn run_onstart(&self) {
+        self.lms.play();
         if let Some(ref program) = self.session.config().onstart {
             util::run_program(program)
         }
     }
 
     fn run_onstop(&self) {
+        self.lms.stop();
         if let Some(ref program) = self.session.config().onstop {
             util::run_program(program)
         }
     }
 
     fn run_onchange(&self) {
+        self.lms.change();
         if let Some(ref program) = self.session.config().onchange {
             util::run_program(program)
         }
@@ -435,6 +479,11 @@ impl ::std::fmt::Debug for PlayerCommand {
             PlayerCommand::Seek(position) => {
                 f.debug_tuple("Seek")
                  .field(&position)
+                 .finish()
+            }
+            PlayerCommand::Volume(volume) => {
+                f.debug_tuple("Volume")
+                 .field(&volume)
                  .finish()
             }
         }
