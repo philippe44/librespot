@@ -41,4 +41,6 @@ pub mod keymaster;
 pub mod mixer;
 pub mod player;
 
+pub mod lms;
+
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));

@@ -96,6 +96,8 @@ fn setup(args: &[String]) -> Setup {
         .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
         .optopt("", "onstop", "Run PROGRAM when playback has ended.", "PROGRAM")
         .optopt("", "onchange", "Run PROGRAM when playback changes (new track, seeking etc.).", "PROGRAM")
+        .optopt("", "player-mac", "MAC address of the Squeezebox to be controlled in Connect mode.", "MAC")
+        .optopt("", "lms", "hostname and port of Logitech Media Server instance (eg. localhost:9000)", "LMS")
         .optflag("v", "verbose", "Enable verbose output")
         .optopt("u", "username", "Username to sign in with", "USERNAME")
         .optopt("p", "password", "Password", "PASSWORD")
@@ -172,6 +174,8 @@ fn setup(args: &[String]) -> Setup {
             onstart: matches.opt_str("onstart"),
             onstop: matches.opt_str("onstop"),
             onchange: matches.opt_str("onchange"),
+            mac: matches.opt_str("player-mac"),
+            lms: matches.opt_str("lms"),
         }
     };
 
