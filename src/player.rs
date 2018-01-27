@@ -3,8 +3,9 @@ use futures::{future, Future};
 use std::borrow::Cow;
 use std::mem;
 use std::process::exit;
-use std::sync::mpsc::{RecvError, TryRecvError};
+use std::sync::mpsc::{RecvError, TryRecvError, RecvTimeoutError};
 use std::thread;
+use std::time::Duration;
 use std;
 
 use core::config::{Bitrate, PlayerConfig};
@@ -19,9 +20,9 @@ use mixer::AudioFilter;
 
 use lms::LMS;
 
-#[derive(Clone)]
 pub struct Player {
-    commands: std::sync::mpsc::Sender<PlayerCommand>,
+    commands: Option<std::sync::mpsc::Sender<PlayerCommand>>,
+    thread_handle: Option<thread::JoinHandle<()>>,
 }
 
 struct PlayerInternal {
@@ -32,6 +33,7 @@ struct PlayerInternal {
 
     state: PlayerState,
     sink: Box<Sink>,
+    sink_running: bool,
     audio_filter: Option<Box<AudioFilter + Send>>,
 }
 
@@ -52,7 +54,7 @@ impl Player {
     {
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
 
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             debug!("new Player[{}]", session.session_id());
 
             let internal = PlayerInternal {
@@ -63,6 +65,7 @@ impl Player {
 
                 state: PlayerState::Stopped,
                 sink: sink_builder(),
+                sink_running: false,
                 audio_filter: audio_filter,
             };
 
@@ -70,12 +73,13 @@ impl Player {
         });
 
         Player {
-            commands: cmd_tx,
+            commands: Some(cmd_tx),
+            thread_handle: Some(handle),
         }
     }
 
     fn command(&self, cmd: PlayerCommand) {
-        self.commands.send(cmd).unwrap();
+        self.commands.as_ref().unwrap().send(cmd).unwrap();
     }
 
     pub fn load(&self, track: SpotifyId, start_playing: bool, position_ms: u32)
@@ -105,6 +109,19 @@ impl Player {
 
     pub fn set_volume(&self, volume: u32) {
         self.command(PlayerCommand::Volume(volume));
+    }
+}
+
+impl Drop for Player {
+    fn drop(&mut self) {
+        debug!("Shutting down player thread ...");
+        self.commands = None;
+        if let Some(handle) = self.thread_handle.take() {
+            match handle.join() {
+                Ok(_) => (),
+                Err(_) => error!("Player thread panicked!")
+            }
+        }
     }
 }
 
@@ -149,7 +166,7 @@ impl PlayerState {
             Paused { end_of_track, .. } |
             Playing { end_of_track, .. } => {
               if !connect_mode {
-                end_of_track.complete(())
+                let _ = end_of_track.send(());
               }
             }
 
@@ -189,10 +206,21 @@ impl PlayerInternal {
     fn run(mut self) {
         loop {
             let cmd = if self.state.is_playing() {
-                match self.commands.try_recv() {
-                    Ok(cmd) => Some(cmd),
-                    Err(TryRecvError::Empty) => None,
-                    Err(TryRecvError::Disconnected) => return,
+                if self.sink_running
+                {
+                    match self.commands.try_recv() {
+                        Ok(cmd) => Some(cmd),
+                        Err(TryRecvError::Empty) => None,
+                        Err(TryRecvError::Disconnected) => return,
+                    }
+                }
+                else
+                {
+                    match self.commands.recv_timeout(Duration::from_secs(5)) {
+                        Ok(cmd) => Some(cmd),
+                        Err(RecvTimeoutError::Timeout) => None,
+                        Err(RecvTimeoutError::Disconnected) => return,
+                    }
                 }
             } else {
                 match self.commands.recv() {
@@ -205,14 +233,40 @@ impl PlayerInternal {
                 self.handle_command(cmd);
             }
 
-            let packet = if let PlayerState::Playing { ref mut decoder, .. } = self.state {
-                Some(decoder.next_packet().expect("Vorbis error"))
-            } else { None };
+            if self.state.is_playing() && ! self.sink_running {
+                self.start_sink();
+            }
 
-            if let Some(packet) = packet {
-                self.handle_packet(packet);
+            if self.sink_running {
+                let packet = if let PlayerState::Playing { ref mut decoder, .. } = self.state {
+                    Some(decoder.next_packet().expect("Vorbis error"))
+                } else {
+                    None
+                };
+
+                if let Some(packet) = packet {
+                    self.handle_packet(packet);
+                }
             }
         }
+    }
+
+    fn start_sink(&mut self) {
+        match self.sink.start() {
+            Ok(()) => self.sink_running = true,
+            Err(err) => error!("Could not start audio: {}", err),
+        }
+    }
+
+    fn stop_sink_if_running(&mut self) {
+        if self.sink_running {
+            self.stop_sink();
+        }
+    }
+
+    fn stop_sink(&mut self) {
+        self.sink.stop().unwrap();
+        self.sink_running = false;
     }
 
     fn handle_packet(&mut self, packet: Option<VorbisPacket>) {
@@ -222,12 +276,18 @@ impl PlayerInternal {
                     editor.modify_stream(&mut packet.data_mut())
                 };
 
-                self.sink.write(&packet.data()).unwrap_or_else(|e| { error!("{}", e); exit(0) });
+                if let Err(err) = self.sink.write(&packet.data()) {
+                    if self.lms.is_configured() {
+                      error!("Could not write audio: {}", err);
+                      self.stop_sink();
+                    }
+                    else {
+                      self.sink.write(&packet.data()).unwrap_or_else(|e| { error!("{}", e); exit(0) });
+                    }
+                }
             }
-
             None => {
-                self.sink.stop().unwrap();
-
+                self.stop_sink();
                 if !self.lms.is_configured() {
                   self.run_onstop();
                 }
@@ -243,7 +303,7 @@ impl PlayerInternal {
         match cmd {
             PlayerCommand::Load(track_id, play, position, end_of_track) => {
                 if self.state.is_playing() {
-                    self.sink.stop().unwrap();
+                    self.stop_sink_if_running();
                 }
 
                 match self.load_track(track_id, position as i64) {
@@ -255,7 +315,7 @@ impl PlayerInternal {
                             else {
                                 self.run_onchange();
                             }
-                            self.sink.start().unwrap();
+                            self.start_sink();
 
                             self.state = PlayerState::Playing {
                                 decoder: decoder,
@@ -274,7 +334,7 @@ impl PlayerInternal {
                     }
 
                     None => {
-                        end_of_track.complete(());
+                        let _ = end_of_track.send(());
                         if self.state.is_playing() {
                             self.run_onstop();
                         }
@@ -318,7 +378,7 @@ impl PlayerInternal {
                     self.state.paused_to_playing();
 
                     self.run_onstart();
-                    self.sink.start().unwrap();
+                    self.start_sink();
                 } else if self.lms.is_configured() {
                     self.run_onstart();
                 } else {
@@ -330,7 +390,7 @@ impl PlayerInternal {
                 if let PlayerState::Playing { .. } = self.state {
                     self.state.playing_to_paused();
 
-                    self.sink.stop().unwrap();
+                    self.stop_sink_if_running();
                     self.run_onstop();
                 } else if self.lms.is_configured() {
                     self.run_onstop();
@@ -342,7 +402,7 @@ impl PlayerInternal {
             PlayerCommand::Stop => {
                 match self.state {
                     PlayerState::Playing { .. } => {
-                        self.sink.stop().unwrap();
+                        self.stop_sink_if_running();
                         self.run_onstop();
                         self.state = PlayerState::Stopped;
                     }
