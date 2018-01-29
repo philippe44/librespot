@@ -36,6 +36,8 @@ extern crate libpulse_sys;
 extern crate libc;
 
 pub mod audio_backend;
+
+#[cfg(not(target_os="windows"))]
 pub mod discovery;
 pub mod keymaster;
 pub mod mixer;
