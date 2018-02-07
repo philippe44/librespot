@@ -30,21 +30,22 @@ extern crate portaudio_rs;
 #[cfg(feature = "libpulse-sys")]
 extern crate libpulse_sys;
 
+#[cfg(feature = "jackaudio-backend")]
+extern crate jack;
+
 #[cfg(feature = "libc")]
 extern crate libc;
 
 #[cfg(feature = "with-dns-sd")]
 extern crate dns_sd;
 
-#[cfg(not(feature = "with-dns-sd"))]
-#[cfg(not(target_os="windows"))]
+#[cfg(all(not(feature = "with-dns-sd"), not(target_os="windows")))]
 extern crate mdns;
 
 pub mod audio_backend;
 
 #[cfg(not(target_os="windows"))]
 pub mod discovery;
-pub mod keymaster;
 pub mod mixer;
 pub mod player;
 
