@@ -10,8 +10,6 @@ extern crate base64;
 extern crate crypto;
 extern crate futures;
 extern crate hyper;
-#[cfg(not(target_os="windows"))]
-extern crate mdns;
 extern crate num_bigint;
 extern crate protobuf;
 extern crate rand;
@@ -34,6 +32,13 @@ extern crate libpulse_sys;
 
 #[cfg(feature = "libc")]
 extern crate libc;
+
+#[cfg(feature = "with-dns-sd")]
+extern crate dns_sd;
+
+#[cfg(not(feature = "with-dns-sd"))]
+#[cfg(not(target_os="windows"))]
+extern crate mdns;
 
 pub mod audio_backend;
 
