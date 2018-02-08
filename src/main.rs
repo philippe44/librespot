@@ -26,7 +26,7 @@ use librespot::core::version;
 
 use librespot::audio_backend::{self, Sink, BACKENDS};
 #[cfg(not(target_os="windows"))]
-use librespot::discovery::{discovery, DiscoveryStream};
+use librespot::discovery::discovery::{discovery, DiscoveryStream};
 use librespot::mixer::{self, Mixer};
 use librespot::player::Player;
 use librespot::spirc::{Spirc, SpircTask};
