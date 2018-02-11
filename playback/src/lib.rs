@@ -1,6 +1,8 @@
 #[macro_use] extern crate log;
 
 extern crate futures;
+extern crate hyper;
+extern crate tokio_core;
 
 #[cfg(feature = "alsa-backend")]
 extern crate alsa;
@@ -16,6 +18,8 @@ extern crate jack;
 
 #[cfg(feature = "libc")]
 extern crate libc;
+
+pub mod lms;
 
 extern crate librespot_audio as audio;
 extern crate librespot_core as core;

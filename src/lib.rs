@@ -22,7 +22,4 @@ pub extern crate librespot_playback as playback;
 pub extern crate librespot_protocol as protocol;
 pub extern crate librespot_metadata as metadata;
 
-
-pub mod lms;
-
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));

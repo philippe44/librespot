@@ -4,7 +4,7 @@ use std;
 use std::borrow::Cow;
 use std::io::{Read, Seek, SeekFrom, Result};
 use std::mem;
-use std::process::Command;
+use std::process::{exit, Command};
 use std::sync::mpsc::{RecvError, TryRecvError, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
