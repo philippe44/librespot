@@ -19,7 +19,6 @@ extern crate crypto;
 extern crate getopts;
 extern crate hyper;
 extern crate linear_map;
-#[cfg(not(target_os="windows"))]
 extern crate mdns;
 extern crate num_bigint;
 extern crate num_integer;
