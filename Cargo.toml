@@ -59,7 +59,7 @@ tokio-proto = "0.1.0"
 tokio-signal = "0.1"
 uuid = { version = "0.4", features = ["v4"] }
 
-mdns = { git = "https://github.com/michaelherger/rust-mdns", branch = "windows" }
+mdns            = { git = "https://github.com/plietar/rust-mdns" }
 
 [build-dependencies]
 rand            = "0.3.13"
