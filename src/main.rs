@@ -208,10 +208,7 @@ fn setup(args: &[String]) -> Setup {
         }
     };
 
-#[cfg(not(target_os="windows"))]
     let enable_discovery = !matches.opt_present("disable-discovery");
-#[cfg(target_os="windows")]
-    let enable_discovery = false;
 
     Setup {
         backend: backend,
@@ -237,10 +234,7 @@ struct Main {
     mixer: fn() -> Box<Mixer>,
     handle: Handle,
 
-#[cfg(not(target_os="windows"))]
     discovery: Option<DiscoveryStream>,
-#[cfg(target_os="windows")]
-    discovery: Option<String>,
     signal: IoStream<()>,
 
     spirc: Option<Spirc>,
@@ -270,14 +264,12 @@ impl Main {
             signal: Box::new(tokio_signal::ctrl_c(&handle).flatten_stream()),
         };
 
-#[cfg(not(target_os="windows"))] {
         if setup.enable_discovery {
             let config = task.connect_config.clone();
             let device_id = task.session_config.device_id.clone();
 
             task.discovery = Some(discovery(&handle, config, device_id, setup.zeroconf_port).unwrap());
         }
-}
         if let Some(credentials) = setup.credentials {
             task.credentials(credentials);
         }
@@ -308,7 +300,6 @@ impl Future for Main {
         loop {
             let mut progress = false;
 
-#[cfg(not(target_os="windows"))] {
             if let Some(Async::Ready(Some(creds))) = self.discovery.as_mut().map(|d| d.poll().unwrap()) {
                 if let Some(ref spirc) = self.spirc {
                     spirc.shutdown();
@@ -317,7 +308,6 @@ impl Future for Main {
 
                 progress = true;
             }
-}
 
             if let Async::Ready(session) = self.connect.poll().unwrap() {
                 self.connect = Box::new(futures::future::empty());
