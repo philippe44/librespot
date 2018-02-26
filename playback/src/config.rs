@@ -33,6 +33,8 @@ pub struct PlayerConfig {
     pub onchange: Option<String>,
     pub mac: Option<String>,
     pub lms: Option<String>,
+    pub normalisation: bool,
+    pub normalisation_pregain: f32,
 }
 
 impl Default for PlayerConfig {
@@ -44,6 +46,8 @@ impl Default for PlayerConfig {
             onchange: None,
             mac: None,
             lms: None,
+            normalisation: false,
+            normalisation_pregain: 0.0,
         }
     }
 }
