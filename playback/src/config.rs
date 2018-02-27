@@ -30,6 +30,7 @@ pub struct PlayerConfig {
     pub bitrate: Bitrate,
     pub normalisation: bool,
     pub normalisation_pregain: f32,
+    pub lms_connect_mode: bool
 }
 
 impl Default for PlayerConfig {
@@ -38,6 +39,7 @@ impl Default for PlayerConfig {
             bitrate: Bitrate::default(),
             normalisation: false,
             normalisation_pregain: 0.0,
+            lms_connect_mode: false
         }
     }
 }

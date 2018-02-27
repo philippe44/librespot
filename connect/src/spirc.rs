@@ -516,9 +516,8 @@ impl SpircTask {
             }
 
             MessageType::kMessageTypeVolume => {
-                let volume = frame.get_volume();
-                self.player.set_volume(volume);
-                self.device.set_volume(volume);
+                self.device.set_volume(frame.get_volume());
+                self.player.set_volume(frame.get_volume());     // tell the player to send a change volume event
                 self.mixer
                     .set_volume(volume_to_mixer(frame.get_volume() as u16));
                 self.notify(None);

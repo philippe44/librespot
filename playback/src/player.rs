@@ -6,6 +6,7 @@ use std;
 use std::borrow::Cow;
 use std::io::{Read, Result, Seek, SeekFrom};
 use std::mem;
+use std::process::exit;
 use std::sync::mpsc::{RecvError, RecvTimeoutError, TryRecvError};
 use std::thread;
 use std::time::Duration;
@@ -254,7 +255,7 @@ impl PlayerState {
         }
     }
 
-    fn playing_to_end_of_track(&mut self) {
+    fn playing_to_end_of_track(&mut self, config: PlayerConfig) {
         use self::PlayerState::*;
         match mem::replace(self, Invalid) {
             Playing {
@@ -262,7 +263,9 @@ impl PlayerState {
                 end_of_track,
                 ..
             } => {
-                let _ = end_of_track.send(());
+                if !config.lms_connect_mode {
+                   let _ = end_of_track.send(());
+                }
                 *self = EndOfTrack { track_id };
             }
             _ => panic!("Called playing_to_end_of_track in non-playing state."),
@@ -397,13 +400,18 @@ impl PlayerInternal {
 
                 if let Err(err) = self.sink.write(&packet.data()) {
                     error!("Could not write audio: {}", err);
-                    self.stop_sink();
+                    if self.config.lms_connect_mode  {
+                        self.stop_sink();
+                    }
+                    else {
+                        exit(0);
+                    }
                 }
             }
 
             None => {
                 self.stop_sink();
-                self.state.playing_to_end_of_track();
+                self.state.playing_to_end_of_track(self.config.clone());
             }
         }
     }
