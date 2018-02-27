@@ -10,6 +10,7 @@ extern crate crypto;
 
 use env_logger::LogBuilder;
 use futures::{Future, Async, Poll, Stream};
+use futures::sync::mpsc::UnboundedReceiver;
 use std::env;
 use std::io::{self, stderr, Write};
 use std::path::PathBuf;
@@ -31,8 +32,11 @@ use librespot::playback::audio_backend::{self, Sink, BACKENDS};
 use librespot::playback::config::{Bitrate, PlayerConfig};
 use librespot::connect::discovery::{discovery, DiscoveryStream};
 use librespot::playback::mixer::{self, Mixer};
-use librespot::playback::player::Player;
+use librespot::playback::player::{Player, PlayerEvent};
 use librespot::connect::spirc::{Spirc, SpircTask};
+
+mod player_event_handler;
+use player_event_handler::run_program_on_events;
 
 fn device_id(name: &str) -> String {
     let mut h = Sha1::new();
@@ -92,6 +96,7 @@ struct Setup {
     credentials: Option<Credentials>,
     enable_discovery: bool,
     zeroconf_port: u16,
+    player_event_program: Option<String>,
 }
 
 fn setup(args: &[String]) -> Setup {
@@ -101,11 +106,7 @@ fn setup(args: &[String]) -> Setup {
         .reqopt("n", "name", "Device name", "NAME")
         .optopt("", "device-type", "Displayed device type", "DEVICE_TYPE")
         .optopt("b", "bitrate", "Bitrate (96, 160 or 320). Defaults to 160", "BITRATE")
-        .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
-        .optopt("", "onstop", "Run PROGRAM when playback has ended.", "PROGRAM")
-        .optopt("", "onchange", "Run PROGRAM when playback changes (new track, seeking etc.).", "PROGRAM")
-        .optopt("", "player-mac", "MAC address of the Squeezebox to be controlled in Connect mode.", "MAC")
-        .optopt("", "lms", "hostname and port of Logitech Media Server instance (eg. localhost:9000)", "LMS")
+        .optopt("", "onevent", "Run PROGRAM when playback is about to begin.", "PROGRAM")
         .optflag("v", "verbose", "Enable verbose output")
         .optopt("u", "username", "Username to sign in with", "USERNAME")
         .optopt("p", "password", "Password", "PASSWORD")
@@ -176,10 +177,17 @@ fn setup(args: &[String]) -> Setup {
     let credentials = {
         let cached_credentials = cache.as_ref().and_then(Cache::credentials);
 
+       let password = |username: &String| -> String {
+            write!(stderr(), "Password for {}: ", username).unwrap();
+            stderr().flush().unwrap();
+            rpassword::read_password().unwrap()
+        };
+
         get_credentials(
             matches.opt_str("username"),
             matches.opt_str("password"),
-            cached_credentials
+            cached_credentials,
+            password
         )
     };
 
@@ -199,11 +207,6 @@ fn setup(args: &[String]) -> Setup {
 
         PlayerConfig {
             bitrate: bitrate,
-            onstart: matches.opt_str("onstart"),
-            onstop: matches.opt_str("onstop"),
-            onchange: matches.opt_str("onchange"),
-            mac: matches.opt_str("player-mac"),
-            lms: matches.opt_str("lms"),
             normalisation: matches.opt_present("enable-volume-normalisation"),
             normalisation_pregain: matches.opt_str("normalisation-pregain")
                 .map(|pregain| pregain.parse::<f32>().expect("Invalid pregain float value"))
@@ -236,6 +239,7 @@ fn setup(args: &[String]) -> Setup {
         enable_discovery: enable_discovery,
         zeroconf_port: zeroconf_port,
         mixer: mixer,
+        player_event_program: matches.opt_str("onevent"),
     }
 }
 
@@ -257,6 +261,9 @@ struct Main {
     connect: Box<Future<Item=Session, Error=io::Error>>,
 
     shutdown: bool,
+
+    player_event_channel: Option<UnboundedReceiver<PlayerEvent>>,
+    player_event_program: Option<String>,
 }
 
 impl Main {
@@ -277,6 +284,9 @@ impl Main {
             spirc_task: None,
             shutdown: false,
             signal: Box::new(tokio_signal::ctrl_c(&handle).flatten_stream()),
+
+            player_event_channel: None,
+            player_event_program: setup.player_event_program,
         };
 
         if setup.enable_discovery {
@@ -285,6 +295,7 @@ impl Main {
 
             task.discovery = Some(discovery(&handle, config, device_id, setup.zeroconf_port).unwrap());
         }
+
         if let Some(credentials) = setup.credentials {
             task.credentials(credentials);
         }
@@ -333,13 +344,14 @@ impl Future for Main {
 
                 let audio_filter = mixer.get_audio_filter();
                 let backend = self.backend;
-                let player = Player::new(player_config, session.clone(), audio_filter, move || {
+                let (player, event_channel) = Player::new(player_config, session.clone(), audio_filter, move || {
                     (backend)(device)
                 });
 
                 let (spirc, spirc_task) = Spirc::new(connect_config, session, player, mixer);
                 self.spirc = Some(spirc);
                 self.spirc_task = Some(spirc_task);
+                self.player_event_channel = Some(event_channel);
 
                 progress = true;
             }
@@ -363,6 +375,14 @@ impl Future for Main {
                         return Ok(Async::Ready(()));
                     } else {
                         panic!("Spirc shut down unexpectedly");
+                    }
+                }
+            }
+
+            if let Some(ref mut player_event_channel) = self.player_event_channel {
+                if let Async::Ready(Some(event)) = player_event_channel.poll().unwrap() {
+                    if let Some(ref program) = self.player_event_program {
+                        run_program_on_events(event, program);
                     }
                 }
             }

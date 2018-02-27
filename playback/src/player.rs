@@ -1,11 +1,11 @@
 use byteorder::{LittleEndian, ReadBytesExt};
 use futures::sync::oneshot;
 use futures::{future, Future};
+use futures;
 use std;
 use std::borrow::Cow;
 use std::io::{Read, Seek, SeekFrom, Result};
 use std::mem;
-use std::process::{exit, Command};
 use std::sync::mpsc::{RecvError, TryRecvError, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
@@ -20,8 +20,6 @@ use audio::{VorbisDecoder, VorbisPacket};
 use metadata::{FileFormat, Track, Metadata};
 use mixer::AudioFilter;
 
-use lms::LMS;
-
 pub struct Player {
     commands: Option<std::sync::mpsc::Sender<PlayerCommand>>,
     thread_handle: Option<thread::JoinHandle<()>>,
@@ -31,12 +29,12 @@ struct PlayerInternal {
     session: Session,
     config: PlayerConfig,
     commands: std::sync::mpsc::Receiver<PlayerCommand>,
-    lms: LMS,
 
     state: PlayerState,
     sink: Box<Sink>,
     sink_running: bool,
     audio_filter: Option<Box<AudioFilter + Send>>,
+    event_sender: futures::sync::mpsc::UnboundedSender<PlayerEvent>,
 }
 
 enum PlayerCommand {
@@ -47,6 +45,32 @@ enum PlayerCommand {
     Seek(u32),
     Volume(u32),
 }
+
+#[derive(Debug, Clone)]
+pub enum PlayerEvent {
+    Started {
+        track_id: SpotifyId,
+    },
+
+    Changed {
+        old_track_id: SpotifyId,
+        new_track_id: SpotifyId,
+    },
+
+    Stopped {
+        track_id: SpotifyId,
+    },
+
+    Volume {
+        volume: u32
+    },
+
+    Seek {
+        position: u32
+    }
+}
+
+type PlayerEventChannel = futures::sync::mpsc::UnboundedReceiver<PlayerEvent>;
 
 #[derive(Clone, Copy, Debug)]
 struct NormalisationData {
@@ -94,16 +118,16 @@ impl NormalisationData {
 impl Player {
     pub fn new<F>(config: PlayerConfig, session: Session,
                   audio_filter: Option<Box<AudioFilter + Send>>,
-                  sink_builder: F) -> Player
+                  sink_builder: F) -> (Player, PlayerEventChannel)
         where F: FnOnce() -> Box<Sink> + Send + 'static
     {
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
+        let (event_sender, event_receiver) = futures::sync::mpsc::unbounded();
 
         let handle = thread::spawn(move || {
             debug!("new Player[{}]", session.session_id());
 
             let internal = PlayerInternal {
-                lms: LMS::new(config.lms.clone(), config.mac.clone()),
                 session: session,
                 config: config,
                 commands: cmd_rx,
@@ -112,15 +136,14 @@ impl Player {
                 sink: sink_builder(),
                 sink_running: false,
                 audio_filter: audio_filter,
+                event_sender: event_sender,
             };
 
             internal.run();
         });
 
-        Player {
-            commands: Some(cmd_tx),
-            thread_handle: Some(handle),
-        }
+        (Player { commands: Some(cmd_tx), thread_handle: Some(handle) },
+         event_receiver)
     }
 
     fn command(&self, cmd: PlayerCommand) {
@@ -174,16 +197,18 @@ type Decoder = VorbisDecoder<Subfile<AudioDecrypt<AudioFile>>>;
 enum PlayerState {
     Stopped,
     Paused {
+        track_id: SpotifyId,
         decoder: Decoder,
         end_of_track: oneshot::Sender<()>,
         normalisation_factor: f32,
     },
     Playing {
+        track_id: SpotifyId,
         decoder: Decoder,
         end_of_track: oneshot::Sender<()>,
         normalisation_factor: f32,
     },
-
+    EndOfTrack { track_id: SpotifyId },
     Invalid,
 }
 
@@ -191,7 +216,7 @@ impl PlayerState {
     fn is_playing(&self) -> bool {
         use self::PlayerState::*;
         match *self {
-            Stopped | Paused { .. } => false,
+            Stopped | EndOfTrack { .. } | Paused { .. } => false,
             Playing { .. } => true,
             Invalid => panic!("invalid state"),
         }
@@ -200,33 +225,30 @@ impl PlayerState {
     fn decoder(&mut self) -> Option<&mut Decoder> {
         use self::PlayerState::*;
         match *self {
-            Stopped => None,
+            Stopped | EndOfTrack { .. } => None,
             Paused { ref mut decoder, .. } |
             Playing { ref mut decoder, .. } => Some(decoder),
             Invalid => panic!("invalid state"),
         }
     }
 
-    fn signal_end_of_track(self, connect_mode: bool) {
+    fn playing_to_end_of_track(&mut self) {
         use self::PlayerState::*;
-        match self {
-            Paused { end_of_track, .. } |
-            Playing { end_of_track, .. } => {
-              if !connect_mode {
+        match mem::replace(self, Invalid) {
+            Playing { track_id, end_of_track, ..} => {
                 let _ = end_of_track.send(());
-              }
-            }
-
-            Stopped => warn!("signal_end_of_track from stopped state"),
-            Invalid => panic!("invalid state"),
+                *self = EndOfTrack { track_id };
+            },
+            _ => panic!("Called playing_to_end_of_track in non-playing state.")
         }
     }
 
     fn paused_to_playing(&mut self) {
         use self::PlayerState::*;
         match ::std::mem::replace(self, Invalid) {
-            Paused { decoder, end_of_track, normalisation_factor } => {
+            Paused { track_id, decoder, end_of_track, normalisation_factor } => {
                 *self = Playing {
+                    track_id: track_id,
                     decoder: decoder,
                     end_of_track: end_of_track,
                     normalisation_factor: normalisation_factor,
@@ -239,8 +261,9 @@ impl PlayerState {
     fn playing_to_paused(&mut self) {
         use self::PlayerState::*;
         match ::std::mem::replace(self, Invalid) {
-            Playing { decoder, end_of_track, normalisation_factor } => {
+            Playing { track_id, decoder, end_of_track, normalisation_factor } => {
                 *self = Paused {
+                    track_id: track_id,
                     decoder: decoder,
                     end_of_track: end_of_track,
                     normalisation_factor: normalisation_factor,
@@ -335,23 +358,14 @@ impl PlayerInternal {
                 }
 
                 if let Err(err) = self.sink.write(&packet.data()) {
-                    if self.lms.is_configured() {
-                      error!("Could not write audio: {}", err);
-                      self.stop_sink();
-                    }
-                    else {
-                      self.sink.write(&packet.data()).unwrap_or_else(|e| { error!("{}", e); exit(0) });
-                    }
+                    error!("Could not write audio: {}", err);
+                    self.stop_sink();
                 }
             }
+
             None => {
                 self.stop_sink();
-                if !self.lms.is_configured() {
-                  self.run_onstop();
-                }
-
-                let old_state = mem::replace(&mut self.state, PlayerState::Stopped);
-                old_state.signal_end_of_track(self.lms.is_configured());
+                self.state.playing_to_end_of_track();
             }
         }
     }
@@ -367,37 +381,46 @@ impl PlayerInternal {
                 match self.load_track(track_id, position as i64) {
                     Some((decoder, normalisation_factor)) => {
                         if play {
-                            if !self.state.is_playing() {
-                                self.run_onstart();
+                            match self.state {
+                                PlayerState::Playing { track_id: old_track_id, ..}
+                                | PlayerState::EndOfTrack { track_id: old_track_id, .. } =>
+                                    self.send_event(PlayerEvent::Changed {
+                                        old_track_id: old_track_id,
+                                        new_track_id: track_id
+                                    }),
+                                _ => self.send_event(PlayerEvent::Started { track_id }),
                             }
-                            else {
-                                self.run_onchange();
-                            }
+
                             self.start_sink();
 
                             self.state = PlayerState::Playing {
+                                track_id: track_id,
                                 decoder: decoder,
                                 end_of_track: end_of_track,
                                 normalisation_factor: normalisation_factor,
                             };
                         } else {
-                            if self.state.is_playing() {
-                                self.run_onstop();
-                            }
-
                             self.state = PlayerState::Paused {
+                                track_id: track_id,
                                 decoder: decoder,
                                 end_of_track: end_of_track,
                                 normalisation_factor: normalisation_factor,
                             };
+                            match self.state {
+                                PlayerState::Playing { track_id: old_track_id, ..}
+                                | PlayerState::EndOfTrack { track_id: old_track_id, .. } =>
+                                    self.send_event(PlayerEvent::Changed {
+                                        old_track_id: old_track_id,
+                                        new_track_id: track_id
+                                    }),
+                                _ => (),
+                            }
+                            self.send_event(PlayerEvent::Stopped { track_id });
                         }
                     }
 
                     None => {
                         let _ = end_of_track.send(());
-                        if self.state.is_playing() {
-                            self.run_onstop();
-                        }
                     }
                 }
             }
@@ -411,49 +434,41 @@ impl PlayerInternal {
                 } else {
                     warn!("Player::seek called from invalid state");
                 }
-                self.run_onchange();
+
+                self.send_event(PlayerEvent::Seek { position })
             }
 
             PlayerCommand::Volume(mut volume) => {
-                if self.lms.is_configured() {
-                  if volume > 0 {
+                if volume > 0 {
                     volume = volume * 100 / std::u16::MAX as u32;
-                  } else {
+                } else {
                     volume = 0;
-                  }
-
-                  // LMS volume is 0-100. We need to convert
-                  let v2 = if volume > 100 {
-                    Some(100 as u16)
-                  } else {
-                    Some(volume as u16)
-                  };
-
-                  self.lms.volume(v2.unwrap());
                 }
+
+                if volume > 100 {
+                    volume = 100;
+                };
+
+                self.send_event(PlayerEvent::Volume { volume });
             }
 
             PlayerCommand::Play => {
-                if let PlayerState::Paused { .. } = self.state {
+                if let PlayerState::Paused { track_id, .. } = self.state {
                     self.state.paused_to_playing();
 
-                    self.run_onstart();
+                    self.send_event(PlayerEvent::Started { track_id });
                     self.start_sink();
-                } else if self.lms.is_configured() {
-                    self.run_onstart();
                 } else {
                     warn!("Player::play called from invalid state");
                 }
             }
 
             PlayerCommand::Pause => {
-                if let PlayerState::Playing { .. } = self.state {
+                if let PlayerState::Playing { track_id, .. } = self.state {
                     self.state.playing_to_paused();
 
                     self.stop_sink_if_running();
-                    self.run_onstop();
-                } else if self.lms.is_configured() {
-                    self.run_onstop();
+                    self.send_event(PlayerEvent::Stopped { track_id });
                 } else {
                     warn!("Player::pause called from invalid state");
                 }
@@ -461,19 +476,14 @@ impl PlayerInternal {
 
             PlayerCommand::Stop => {
                 match self.state {
-                    PlayerState::Playing { .. } => {
+                    PlayerState::Playing { track_id, .. }
+                    | PlayerState::Paused { track_id, .. }
+                    | PlayerState::EndOfTrack { track_id } => {
                         self.stop_sink_if_running();
-                        self.run_onstop();
-                        self.state = PlayerState::Stopped;
-                    }
-                    PlayerState::Paused { .. } => {
+                        self.send_event(PlayerEvent::Stopped { track_id });
                         self.state = PlayerState::Stopped;
                     },
                     PlayerState::Stopped => {
-                      // we're not signalling end of stream, therefore the state is not updated?
-                      if self.lms.is_configured() {
-                        self.run_onstop();
-                      }
                       warn!("Player::stop called from invalid state");
                     }
                     PlayerState::Invalid => panic!("invalid state"),
@@ -482,25 +492,8 @@ impl PlayerInternal {
         }
     }
 
-    fn run_onstart(&self) {
-        self.lms.play();
-        if let Some(ref program) = self.config.onstart {
-            run_program(program)
-        }
-    }
-
-    fn run_onstop(&self) {
-        self.lms.stop();
-        if let Some(ref program) = self.config.onstop {
-            run_program(program)
-        }
-    }
-
-    fn run_onchange(&self) {
-        self.lms.change();
-        if let Some(ref program) = self.config.onchange {
-            run_program(program)
-        }
+    fn send_event(&mut self, event: PlayerEvent) {
+        let _ = self.event_sender.unbounded_send(event.clone());
     }
 
     fn find_available_alternative<'a>(&self, track: &'a Track) -> Option<Cow<'a, Track>> {
@@ -648,14 +641,4 @@ impl<T: Read + Seek> Seek for Subfile<T> {
             Ok(0)
         }
     }
-}
-
-fn run_program(program: &str) {
-    info!("Running {}", program);
-    let mut v: Vec<&str> = program.split_whitespace().collect();
-    let status = Command::new(&v.remove(0))
-            .args(&v)
-            .status()
-            .expect("program failed to start");
-    info!("Exit status: {}", status);
 }

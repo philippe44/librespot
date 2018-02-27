@@ -28,11 +28,6 @@ impl Default for Bitrate {
 #[derive(Clone, Debug)]
 pub struct PlayerConfig {
     pub bitrate: Bitrate,
-    pub onstart: Option<String>,
-    pub onstop: Option<String>,
-    pub onchange: Option<String>,
-    pub mac: Option<String>,
-    pub lms: Option<String>,
     pub normalisation: bool,
     pub normalisation_pregain: f32,
 }
@@ -41,11 +36,6 @@ impl Default for PlayerConfig {
     fn default() -> PlayerConfig {
         PlayerConfig {
             bitrate: Bitrate::default(),
-            onstart: None,
-            onstop: None,
-            onchange: None,
-            mac: None,
-            lms: None,
             normalisation: false,
             normalisation_pregain: 0.0,
         }
