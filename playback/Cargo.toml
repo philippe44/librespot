@@ -12,9 +12,7 @@ path = "../metadata"
 
 [dependencies]
 futures = "0.1.8"
-hyper = "0.11.2"
 log = "0.3.5"
-tokio-core = "0.1.2"
 byteorder = "1.2.1"
 
 alsa            = { git = "https://github.com/plietar/rust-alsa", optional = true }
