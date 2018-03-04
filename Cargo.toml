@@ -2,12 +2,13 @@
 name = "librespot"
 version = "0.1.0"
 authors = ["Paul Liétar <paul@lietar.net>"]
-build = "build.rs"
 license = "MIT"
 description = "Open Source Spotify client library"
 keywords = ["spotify"]
 repository = "https://github.com/plietar/librespot"
 readme = "README.md"
+
+[workspace]
 
 [lib]
 name = "librespot"
@@ -18,66 +19,62 @@ name = "librespot"
 path = "src/main.rs"
 doc = false
 
+[dependencies.librespot-audio]
+path = "audio"
+[dependencies.librespot-connect]
+path = "connect"
+[dependencies.librespot-core]
+path = "core"
+[dependencies.librespot-metadata]
+path = "metadata"
+[dependencies.librespot-playback]
+path = "playback"
 [dependencies.librespot-protocol]
 path = "protocol"
 
 [dependencies]
-base64          = "0.5.0"
-bit-set         = "0.4.0"
-byteorder       = "1.0"
-env_logger      = "0.4.0"
-getopts         = "0.2.14"
-hyper           = { git = "https://github.com/hyperium/hyper" }
-lazy_static     = "0.2.0"
-linear-map      = "1.0"
-log             = "0.3.5"
-num-bigint      = "0.1.35"
-num-integer     = "0.1.32"
-num-traits      = "0.1.36"
-protobuf        = "1.1"
-rand            = "0.3.13"
-rpassword       = "0.3.0"
-rust-crypto     = { git = "https://github.com/awmath/rust-crypto.git", branch = "avx2" }
-serde           = "0.9.6"
-serde_json      = "0.9.5"
-serde_derive    = "0.9.6"
-shannon         = "0.2.0"
-tempfile        = "2.1"
-url             = "1.3"
-
-vorbis          = "0.1.0"
-tremor          = { git = "https://github.com/plietar/rust-tremor", optional = true }
-
-alsa            = { git = "https://github.com/plietar/rust-alsa", optional = true }
-portaudio-rs    = { version = "0.3.0", optional = true }
-libpulse-sys    = { git = "https://github.com/astro/libpulse-sys", optional = true }
-
-error-chain = { version = "0.9.0", default_features = false }
+base64 = "0.5.0"
+env_logger = "0.4.0"
 futures = "0.1.8"
+getopts = "0.2.14"
+hyper = "0.11.2"
+log = "0.3.5"
+num-bigint = "0.1.35"
+protobuf = "1.1"
+rand = "0.3.13"
+rpassword = "0.3.0"
+rust-crypto = "0.2.36"
+serde = "0.9.6"
+serde_derive = "0.9.6"
+serde_json = "0.9.5"
 tokio-core = "0.1.2"
-tokio-proto = "0.1.0"
-tokio-signal = "0.1"
-uuid = { version = "0.4", features = ["v4"] }
-
-mdns            = { git = "https://github.com/plietar/rust-mdns" }
+tokio-io = "0.1"
+tokio-signal = "0.1.2"
+url = "1.3"
 
 [build-dependencies]
 rand            = "0.3.13"
 vergen          = "0.1.0"
-protobuf_macros = { git = "https://github.com/plietar/rust-protobuf-macros", features = ["with-syntex"] }
+
+[replace]
+"rust-crypto:0.2.36" = { git = "https://github.com/awmath/rust-crypto.git", branch = "avx2" }
 
 [features]
-alsa-backend = ["alsa"]
-portaudio-backend = ["portaudio-rs"]
-pulseaudio-backend = ["libpulse-sys"]
+alsa-backend = ["librespot-playback/alsa-backend"]
+portaudio-backend = ["librespot-playback/portaudio-backend"]
+pulseaudio-backend = ["librespot-playback/pulseaudio-backend"]
+jackaudio-backend = ["librespot-playback/jackaudio-backend"]
 
-with-tremor = ["tremor"]
+with-tremor = ["librespot-audio/with-tremor"]
+with-vorbis = ["librespot-audio/with-vorbis"]
+
+with-dns-sd = ["librespot-connect/with-dns-sd"]
 
 default = []
 
 [package.metadata.deb]
-maintainer = "nobody"
-copyright = "2016 Paul Liétar"
+maintainer = "librespot-org"
+copyright = "2018 Paul Liétar"
 license_file = ["LICENSE", "4"]
 depends = "$auto"
 extended_description = """\
