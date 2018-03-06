@@ -263,6 +263,8 @@ impl PlayerState {
                 end_of_track,
                 ..
             } => {
+                // this is my ugly hack trying to not skip to the next track prematurely
+                // as the track is downloaded faster than played, we would always skip long before having played the tune
                 if !config.lms_connect_mode {
                    let _ = end_of_track.send(());
                 }
@@ -400,10 +402,9 @@ impl PlayerInternal {
 
                 if let Err(err) = self.sink.write(&packet.data()) {
                     error!("Could not write audio: {}", err);
-                    if self.config.lms_connect_mode  {
-                        self.stop_sink();
-                    }
-                    else {
+                    self.stop_sink();
+
+                    if !self.config.lms_connect_mode  {
                         exit(0);
                     }
                 }
@@ -514,6 +515,11 @@ impl PlayerInternal {
 
                     self.send_event(PlayerEvent::Started { track_id });
                     self.start_sink();
+                // this is my ugly hack trying to recover from not telling Spotify when the track ends...
+                } else if self.config.lms_connect_mode {
+                    if let PlayerState::EndOfTrack { track_id, .. } = self.state {
+                        self.send_event(PlayerEvent::Started { track_id });
+                    }
                 } else {
                     warn!("Player::play called from invalid state");
                 }
@@ -525,6 +531,11 @@ impl PlayerInternal {
 
                     self.stop_sink_if_running();
                     self.send_event(PlayerEvent::Stopped { track_id });
+                // this is my ugly hack trying to recover from not telling Spotify when the track ends...
+                } else if self.config.lms_connect_mode {
+                    if let PlayerState::EndOfTrack { track_id, .. } = self.state {
+                        self.send_event(PlayerEvent::Stopped { track_id });
+                    }
                 } else {
                     warn!("Player::pause called from invalid state");
                 }
