@@ -15,8 +15,8 @@ use config::{Bitrate, PlayerConfig};
 use core::session::Session;
 use core::spotify_id::SpotifyId;
 
+use audio::{AudioDecoder, AudioPacket, PassthroughDecoder, VorbisDecoder};
 use audio::{AudioDecrypt, AudioFile};
-use audio::{VorbisDecoder, VorbisPacket};
 use audio_backend::Sink;
 use metadata::{FileFormat, Metadata, Track};
 use mixer::AudioFilter;
@@ -208,7 +208,7 @@ impl Drop for Player {
     }
 }
 
-type Decoder = VorbisDecoder<Subfile<AudioDecrypt<AudioFile>>>;
+type Decoder = Box<AudioDecoder>;
 enum PlayerState {
     Stopped,
     Paused {
@@ -384,17 +384,19 @@ impl PlayerInternal {
         self.sink_running = false;
     }
 
-    fn handle_packet(&mut self, packet: Option<VorbisPacket>, normalisation_factor: f32) {
+    fn handle_packet(&mut self, packet: Option<AudioPacket>, normalisation_factor: f32) {
         match packet {
             Some(mut packet) => {
                 if packet.data().len() > 0 {
-                    if let Some(ref editor) = self.audio_filter {
-                        editor.modify_stream(&mut packet.data_mut())
-                    };
+                    if !self.config.pass_through {
+                        if let Some(ref editor) = self.audio_filter {
+                            editor.modify_stream(&mut packet.data_mut())
+                        };
 
-                    if self.config.normalisation && normalisation_factor != 1.0 {
-                        for x in packet.data_mut().iter_mut() {
-                            *x = (*x as f32 * normalisation_factor) as i16;
+                        if self.config.normalisation && normalisation_factor != 1.0 {
+                            for x in packet.data_mut().iter_mut() {
+                                *x = (*x as f32 * normalisation_factor) as i16;
+                            }
                         }
                     }
 
@@ -609,12 +611,12 @@ impl PlayerInternal {
         let key = self
             .session
             .audio_key()
-            .request(track.id, file_id)
-            .wait()
-            .unwrap();
+            .request(track.id, file_id);
+        let encrypted_file = AudioFile::open(&self.session, file_id);
 
-        let encrypted_file = AudioFile::open(&self.session, file_id).wait().unwrap();
 
+        let encrypted_file = encrypted_file.wait().unwrap();
+        let key = key.wait().unwrap();
         let mut decrypted_file = AudioDecrypt::new(key, encrypted_file);
 
         let normalisation_factor = match NormalisationData::parse_from_file(&mut decrypted_file) {
@@ -627,11 +629,17 @@ impl PlayerInternal {
 
         let audio_file = Subfile::new(decrypted_file, 0xa7);
 
-        let mut decoder = VorbisDecoder::new(audio_file).unwrap();
+        let mut decoder = if self.config.pass_through {
+            Box::new(PassthroughDecoder::new(audio_file).unwrap()) as Decoder
+        } else {
+            Box::new(VorbisDecoder::new(audio_file).unwrap()) as Decoder
+        };
 
-        match decoder.seek(position) {
-            Ok(_) => (),
-            Err(err) => error!("Vorbis error: {:?}", err),
+        if position != 0 {
+            match decoder.seek(position) {
+                Ok(_) => (),
+                Err(err) => error!("Vorbis error: {:?}", err),
+            }
         }
 
         info!("Track \"{}\" loaded", track.name);
