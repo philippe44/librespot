@@ -12,8 +12,8 @@ use std::thread;
 use std::time::Duration;
 
 use config::{Bitrate, PlayerConfig};
-use core::session::Session;
-use core::spotify_id::SpotifyId;
+use librespot_core::session::Session;
+use librespot_core::spotify_id::SpotifyId;
 
 use audio::{AudioDecoder, AudioPacket, PassthroughDecoder, VorbisDecoder};
 use audio::{AudioDecrypt, AudioFile};
