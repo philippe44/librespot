@@ -1,8 +1,7 @@
 [![Build Status](https://travis-ci.org/librespot-org/librespot.svg?branch=master)](https://travis-ci.org/librespot-org/librespot)
 [![Gitter chat](https://badges.gitter.im/librespot-org/librespot.png)](https://gitter.im/librespot-org/spotify-connect-resources)
 
-## Request for maintainers
-Activity on librespot as of late has been somewhat limited. I’ve been busy with other projects, and have also bought a Spotify Connect speaker, hence my needs for librespot are diminished. It would be great for this project to live on though, and the many contributions that have been provided over the years clearly show that it’s used by more than a few. Thus, I’m requesting that anyone who would be interested in taking over the maintenance of this project leave a note in [#363](https://github.com/librespot-org/librespot/issues/363). Regular contributors have priority, but all interested parties invited. Also, I will not be the sole individual choosing a new maintainer, anyone who has contributed to librespot is welcome to suggest a new maintainer or offer support for an individual in the previously linked thread. After a few weeks, we’ll hopefully choose a new maintainer :)
+Current maintainer is @awiouy folks.
 
 # librespot
 *librespot* is an open source client library for Spotify. It enables
@@ -31,7 +30,7 @@ If you run into a bug when using librespot, please search the existing issues be
 # Building
 Rust 1.32.0 or later is required to build librespot.
 
-We recently switched to using [Rodio](https://github.com/tomaka/rodio) for audio playback by default, hene for macOS and Windows, you should just be able to clone and build librespot (with the command below). For linux, you will need to run the additional commands below, depending on your distro.
+We recently switched to using [Rodio](https://github.com/tomaka/rodio) for audio playback by default, hence for macOS and Windows, you should just be able to clone and build librespot (with the command below). For linux, you will need to run the additional commands below, depending on your distro.
 
 On debian / ubuntu, the following command will install these dependencies :
 ```shell
