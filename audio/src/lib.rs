@@ -75,8 +75,8 @@ impl error::Error for AudioError {
     }
     fn cause(&self) -> Option<&error::Error> {
         match self {
-            AudioError::PassthroughError(err) => err.cause(),
-            AudioError::VorbisError(err) => err.cause(),
+            AudioError::PassthroughError(err) => err.source(),
+            AudioError::VorbisError(err) => err.source(),
         }
     }
 }

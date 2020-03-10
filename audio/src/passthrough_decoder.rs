@@ -76,7 +76,7 @@ impl error::Error for PassthroughError {
     fn cause(&self) -> Option<&error::Error> {
         match self {
             PassthroughError::SeekNotAllowed => None,
-            PassthroughError::IOError(err) => err.cause(),
+            PassthroughError::IOError(err) => err.source(),
         }
     }
 }
