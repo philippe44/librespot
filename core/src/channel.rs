@@ -3,13 +3,18 @@ use bytes::Bytes;
 use futures::sync::{mpsc, BiLock};
 use futures::{Async, Poll, Stream};
 use std::collections::HashMap;
+use std::time::Instant;
 
-use util::SeqGenerator;
+use crate::util::SeqGenerator;
 
 component! {
     ChannelManager : ChannelManagerInner {
         sequence: SeqGenerator<u16> = SeqGenerator::new(0),
         channels: HashMap<u16, mpsc::UnboundedSender<(u8, Bytes)>> = HashMap::new(),
+        download_rate_estimate: usize = 0,
+        download_measurement_start: Option<Instant> = None,
+        download_measurement_bytes: usize = 0,
+        invalid: bool = false,
     }
 }
 
@@ -42,7 +47,9 @@ impl ChannelManager {
 
         let seq = self.lock(|inner| {
             let seq = inner.sequence.get();
-            inner.channels.insert(seq, tx);
+            if !inner.invalid {
+                inner.channels.insert(seq, tx);
+            }
             seq
         });
 
@@ -60,9 +67,35 @@ impl ChannelManager {
         let id: u16 = BigEndian::read_u16(data.split_to(2).as_ref());
 
         self.lock(|inner| {
+            let current_time = Instant::now();
+            if let Some(download_measurement_start) = inner.download_measurement_start {
+                if (current_time - download_measurement_start).as_millis() > 1000 {
+                    inner.download_rate_estimate = 1000 * inner.download_measurement_bytes
+                        / (current_time - download_measurement_start).as_millis() as usize;
+                    inner.download_measurement_start = Some(current_time);
+                    inner.download_measurement_bytes = 0;
+                }
+            } else {
+                inner.download_measurement_start = Some(current_time);
+            }
+
+            inner.download_measurement_bytes += data.len();
+
             if let Entry::Occupied(entry) = inner.channels.entry(id) {
                 let _ = entry.get().unbounded_send((cmd, data));
             }
+        });
+    }
+
+    pub fn get_download_rate_estimate(&self) -> usize {
+        return self.lock(|inner| inner.download_rate_estimate);
+    }
+
+    pub(crate) fn shutdown(&self) {
+        self.lock(|inner| {
+            inner.invalid = true;
+            // destroy the sending halves of the channels to signal everyone who is waiting for something.
+            inner.channels.clear();
         });
     }
 }
@@ -70,7 +103,8 @@ impl ChannelManager {
 impl Channel {
     fn recv_packet(&mut self) -> Poll<Bytes, ChannelError> {
         let (cmd, packet) = match self.receiver.poll() {
-            Ok(Async::Ready(t)) => t.expect("channel closed"),
+            Ok(Async::Ready(Some(t))) => t,
+            Ok(Async::Ready(None)) => return Err(ChannelError), // The channel has been closed.
             Ok(Async::NotReady) => return Ok(Async::NotReady),
             Err(()) => unreachable!(),
         };
