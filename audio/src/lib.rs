@@ -46,7 +46,7 @@ impl AudioPacket {
 }
 
 #[cfg(not(any(feature = "with-tremor", feature = "with-vorbis")))]
-pub use lewton_decoder::{VorbisDecoder, VorbisError};
+pub use crate::lewton_decoder::{VorbisDecoder, VorbisError};
 #[cfg(any(feature = "with-tremor", feature = "with-vorbis"))]
 pub use libvorbis_decoder::{VorbisDecoder, VorbisError};
 pub use passthrough_decoder::{PassthroughDecoder, PassthroughError};
