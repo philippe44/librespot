@@ -16,8 +16,8 @@ use crate::config::{Bitrate, PlayerConfig};
 use librespot_core::session::Session;
 use librespot_core::spotify_id::SpotifyId;
 
-use crate::audio::{AudioDecoder, AudioPacket, PassthroughDecoder, VorbisDecoder};
 use crate::audio::{AudioDecrypt, AudioFile, StreamLoaderController};
+use crate::audio::{VorbisDecoder, VorbisPacket};
 use crate::audio::{
     READ_AHEAD_BEFORE_PLAYBACK_ROUNDTRIPS, READ_AHEAD_BEFORE_PLAYBACK_SECONDS,
     READ_AHEAD_DURING_PLAYBACK_ROUNDTRIPS, READ_AHEAD_DURING_PLAYBACK_SECONDS,
@@ -215,7 +215,7 @@ impl Drop for Player {
     }
 }
 
-type Decoder = Box<AudioDecoder>;
+type Decoder = VorbisDecoder<Subfile<AudioDecrypt<AudioFile>>>;
 enum PlayerState {
     Stopped,
     Paused {
@@ -424,19 +424,17 @@ impl PlayerInternal {
         self.sink_running = false;
     }
 
-    fn handle_packet(&mut self, packet: Option<AudioPacket>, normalisation_factor: f32) {
+    fn handle_packet(&mut self, packet: Option<VorbisPacket>, normalisation_factor: f32) {
         match packet {
             Some(mut packet) => {
                 if packet.data().len() > 0 {
-                    if !self.config.pass_through {
-                        if let Some(ref editor) = self.audio_filter {
-                            editor.modify_stream(&mut packet.data_mut())
-                        };
+                    if let Some(ref editor) = self.audio_filter {
+                        editor.modify_stream(&mut packet.data_mut())
+                    };
 
-                        if self.config.normalisation && normalisation_factor != 1.0 {
-                            for x in packet.data_mut().iter_mut() {
-                                *x = (*x as f32 * normalisation_factor) as i16;
-                            }
+                    if self.config.normalisation && normalisation_factor != 1.0 {
+                        for x in packet.data_mut().iter_mut() {
+                            *x = (*x as f32 * normalisation_factor) as i16;
                         }
                     }
 
@@ -444,7 +442,6 @@ impl PlayerInternal {
                         error!("Could not write audio: {}", err);
                         self.stop_sink();
 
-//                      TODO - verify this is working in Spotty's track mode
                         if !self.config.lms_connect_mode  {
                             exit(0);
                         }
@@ -786,11 +783,7 @@ impl PlayerInternal {
 
         let audio_file = Subfile::new(decrypted_file, 0xa7);
 
-        let mut decoder = if self.config.pass_through {
-            Box::new(PassthroughDecoder::new(audio_file).unwrap()) as Decoder
-        } else {
-            Box::new(VorbisDecoder::new(audio_file).unwrap()) as Decoder
-        };
+        let mut decoder = VorbisDecoder::new(audio_file).unwrap();
 
         if position != 0 {
             match decoder.seek(position) {
