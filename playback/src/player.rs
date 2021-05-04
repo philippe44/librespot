@@ -388,8 +388,8 @@ impl PlayerInternal {
     fn handle_packet(&mut self, packet: Option<AudioPacket>, normalisation_factor: f32) {
         match packet {
             Some(mut packet) => {
-				if !packet.is_empty() {
-					if let AudioPacket::Samples(ref mut data) = packet {
+                if !packet.is_empty() {
+                    if let AudioPacket::Samples(ref mut data) = packet {
                         if let Some(ref editor) = self.audio_filter {
                             editor.modify_stream(data)
                         };
@@ -401,7 +401,7 @@ impl PlayerInternal {
                         }
                     }
 
-					if let Err(err) = self.sink.write(&packet) {					
+                    if let Err(err) = self.sink.write(&packet) {
                         error!("Could not write audio: {}", err);
                         self.stop_sink();
 
@@ -652,7 +652,7 @@ impl PlayerInternal {
                 Err(e) => Err(AudioError::VorbisError(e)),
             }
         };
-		
+
        let mut decoder = match result {
             Ok(decoder) => decoder,
             Err(e) => {
@@ -660,7 +660,7 @@ impl PlayerInternal {
                 return None;
             }
         };
-		
+
         if position != 0 {
             match decoder.seek(position) {
                 Ok(_) => (),
