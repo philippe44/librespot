@@ -129,7 +129,6 @@ pub struct PlayerConfig {
     pub gapless: bool,
     pub passthrough: bool,
     pub lms_connect_mode: bool,
-    pub pass_through: bool
 }
 
 impl Default for PlayerConfig {
@@ -147,7 +146,6 @@ impl Default for PlayerConfig {
             gapless: true,
             passthrough: false,
             lms_connect_mode: false,
-            pass_through: false
         }
     }
 }
