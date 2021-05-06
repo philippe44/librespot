@@ -128,6 +128,8 @@ pub struct PlayerConfig {
     pub normalisation_knee: f32,
     pub gapless: bool,
     pub passthrough: bool,
+    pub lms_connect_mode: bool,
+    pub pass_through: bool
 }
 
 impl Default for PlayerConfig {
@@ -144,6 +146,8 @@ impl Default for PlayerConfig {
             normalisation_knee: 1.0,
             gapless: true,
             passthrough: false,
+            lms_connect_mode: false,
+            pass_through: false
         }
     }
 }
