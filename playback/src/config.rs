@@ -35,6 +35,7 @@ pub enum AudioFormat {
     S24,
     S24_3,
     S16,
+	Ogg,
 }
 
 impl TryFrom<&String> for AudioFormat {

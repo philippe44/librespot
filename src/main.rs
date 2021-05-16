@@ -702,7 +702,12 @@ async fn main() {
                     let connect_config = setup.connect_config.clone();
 
                     let audio_filter = mixer.get_audio_filter();
-                    let format = setup.format;
+                    let format = if player_config.passthrough {
+				        AudioFormat::Ogg
+                    } else { 
+                        setup.format
+                    };
+
                     let backend = setup.backend;
                     let device = setup.device.clone();
                     let (player, event_channel) =

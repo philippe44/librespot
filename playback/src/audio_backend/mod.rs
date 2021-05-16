@@ -47,6 +47,10 @@ macro_rules! sink_as_bytes {
                         let samples_s16: &[i16] = &convert::to_s16(samples);
                         self.write_bytes(samples_s16.as_bytes())
                     }
+                    _ => {
+                        warn!("incompatible format");
+                        Ok(())
+                    }
                 },
                 AudioPacket::OggData(samples) => self.write_bytes(samples),
             }
@@ -104,6 +108,9 @@ use self::pipe::StdoutSink;
 mod subprocess;
 use self::subprocess::SubprocessSink;
 
+mod http;
+use self::http::HTTPSink;
+
 pub const BACKENDS: &[(&str, SinkBuilder)] = &[
     #[cfg(feature = "alsa-backend")]
     ("alsa", mk_sink::<AlsaSink>),
@@ -123,6 +130,7 @@ pub const BACKENDS: &[(&str, SinkBuilder)] = &[
     ("sdl", mk_sink::<SdlSink>),
     ("pipe", mk_sink::<StdoutSink>),
     ("subprocess", mk_sink::<SubprocessSink>),
+    ("http", mk_sink::<HTTPSink>),
 ];
 
 pub fn find(name: Option<String>) -> Option<SinkBuilder> {
